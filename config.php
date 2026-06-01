@@ -24,11 +24,9 @@ if (!is_dir(__DIR__ . '/data')) {
     mkdir(__DIR__ . '/data', 0755, true);
 }
 
-// Daftar model yang dicoba secara berurutan (fallback) - Model valid di v1beta API
+// Daftar model yang tersedia untuk API key ini
 $MODELS = [
-    'gemini-2.0-flash',      // Model terbaru (if available)
-    'gemini-1.5-flash',      // Model cepat dan reliable
-    'gemini-1.5-pro',        // Model lebih powerful
+    'gemini-2.5-flash',      // Model satu-satunya yang tersedia
 ];
 
 function extractPDF($filePath) {
