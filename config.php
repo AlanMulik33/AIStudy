@@ -14,13 +14,11 @@ if ($apiKey === '' || $apiKey === 'YOUR_API_KEY_HERE') {
 
 define('API_KEY', $apiKey);
 define('MAX_TOKENS', (int)($_ENV['MAX_TOKENS'] ?? 8000));
+$LAST_GEMINI_SOURCES = [];
 
 // Daftar model yang dicoba secara berurutan (fallback)
 $MODELS = [
-    'gemini-2.5-flash-lite',      // Model ringan, paling stabil untuk free tier
-    'gemini-2.5-flash',           // Model standar (kadang overload)
-    'gemini-3.1-flash-lite-preview', // Model preview 3.1
-    'gemini-3-flash-preview',     // Model 3 series preview
+    'gemini-2.5-flash',
 ];
 
 function extractPDF($filePath) {
@@ -45,8 +43,93 @@ function extractText($filePath) {
     }
 }
 
-function callGemini($prompt, $system = "") {
-    global $MODELS;
+function extractPPTX($filePath) {
+    if (!class_exists('ZipArchive')) {
+        return "ERROR: Ekstensi PHP ZipArchive belum aktif. Aktifkan extension=zip di php.ini untuk membaca PPTX.";
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($filePath) !== true) {
+        return "ERROR: File PPTX tidak bisa dibuka.";
+    }
+
+    $slides = [];
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $name = $zip->getNameIndex($i);
+        if (!preg_match('#^ppt/slides/slide(\d+)\.xml$#', $name, $matches)) {
+            continue;
+        }
+
+        $xml = $zip->getFromIndex($i);
+        if ($xml === false) {
+            continue;
+        }
+
+        preg_match_all('/<a:t>(.*?)<\/a:t>/s', $xml, $textMatches);
+        $parts = array_map(function($value) {
+            return html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_XML1, 'UTF-8');
+        }, $textMatches[1] ?? []);
+
+        $text = trim(preg_replace('/\s+/', ' ', implode(' ', $parts)));
+        if ($text !== '') {
+            $slides[(int)$matches[1]] = "Slide " . (int)$matches[1] . ": " . $text;
+        }
+    }
+
+    $zip->close();
+    ksort($slides);
+
+    if (empty($slides)) {
+        return "ERROR: Tidak ada teks yang bisa dibaca dari PPTX. Jika slide berupa gambar, upload gambar slide-nya.";
+    }
+
+    return implode("\n\n", $slides);
+}
+
+function createImagePart($filePath, $mimeType) {
+    $bytes = file_get_contents($filePath);
+    if ($bytes === false) {
+        return null;
+    }
+
+    return [
+        "inline_data" => [
+            "mime_type" => $mimeType,
+            "data" => base64_encode($bytes)
+        ]
+    ];
+}
+
+function extractGeminiSources($result) {
+    $sources = [];
+    $chunks = $result['candidates'][0]['groundingMetadata']['groundingChunks'] ??
+        $result['candidates'][0]['grounding_metadata']['grounding_chunks'] ??
+        [];
+
+    foreach ($chunks as $chunk) {
+        $web = $chunk['web'] ?? null;
+        if (!$web || empty($web['uri'])) {
+            continue;
+        }
+
+        $uri = $web['uri'];
+        if (isset($sources[$uri])) {
+            continue;
+        }
+
+        $sources[$uri] = [
+            'title' => $web['title'] ?? $uri,
+            'url' => $uri
+        ];
+    }
+
+    return array_values($sources);
+}
+
+function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperature = 0.4, $extraParts = []) {
+    global $MODELS, $LAST_GEMINI_SOURCES;
+
+    $LAST_GEMINI_SOURCES = [];
 
     $contents = [];
 
@@ -56,18 +139,31 @@ function callGemini($prompt, $system = "") {
         $fullPrompt = $prompt;
     }
 
+    $parts = [["text" => $fullPrompt]];
+    foreach ($extraParts as $part) {
+        $parts[] = $part;
+    }
+
     $contents[] = [
         "role" => "user",
-        "parts" => [["text" => $fullPrompt]]
+        "parts" => $parts
     ];
 
     $data = [
         "contents" => $contents,
         "generationConfig" => [
             "maxOutputTokens" => MAX_TOKENS,
-            "temperature" => 0.7
+            "temperature" => $temperature
         ]
     ];
+
+    if ($useGoogleSearch) {
+        $data["tools"] = [
+            [
+                "google_search" => new stdClass()
+            ]
+        ];
+    }
 
     $lastError = "";
 
@@ -111,6 +207,7 @@ function callGemini($prompt, $system = "") {
         $result = json_decode($response, true);
 
         if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
+            $LAST_GEMINI_SOURCES = extractGeminiSources($result);
             return $result['candidates'][0]['content']['parts'][0]['text'];
         }
 

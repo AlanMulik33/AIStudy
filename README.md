@@ -7,9 +7,10 @@ Aplikasi web untuk mahasiswa. Tanya apa saja ke AI, atau upload materi untuk fit
 ### 1. Tanya Jawab (Tanpa Materi)
 Tanya apa saja langsung ke AI — matematika, logika, konsep pemrograman, dll.
 **Tidak perlu upload materi.**
+Jika perlu, kamu juga bisa melampirkan PDF/TXT/PPTX/gambar langsung di bagian Tanya Jawab.
 
 ### 2. Ringkasan (Butuh Materi)
-Upload PDF/TXT atau paste teks, AI buat ringkasan poin-poin penting.
+Upload PDF/TXT/PPTX/gambar atau paste teks, AI buat ringkasan poin-poin penting.
 
 ### 3. Soal Latihan (Butuh Materi)
 Generate 10 soal pilihan ganda dengan jawaban & penjelasan.
@@ -21,6 +22,8 @@ Buat 15 kartu hafalan untuk belajar cepat.
 
 - **PDF** (.pdf) — File PDF dengan teks asli
 - **TXT** (.txt) — File teks biasa
+- **PPTX** (.pptx) — Presentasi PowerPoint modern dengan teks slide
+- **Gambar** (.jpg, .jpeg, .png, .webp) — Foto/catatan/screenshot yang bisa dianalisis AI
 - **Paste Teks** — Copy-paste langsung ke text area
 
 ## Struktur File
@@ -82,7 +85,7 @@ Buka browser: `http://localhost:8000`
 
 ### Fitur Lanjutan (Butuh Materi)
 1. Klik **"+ Tambah Materi"**
-2. Upload PDF/TXT atau paste teks materi kuliah
+2. Upload PDF/TXT/PPTX/gambar atau paste teks materi kuliah
 3. Pilih fitur: Ringkasan / Soal / Flashcard
 4. Klik **"Proses Materi"**
 
@@ -92,7 +95,8 @@ Buka browser: `http://localhost:8000`
 |---------|--------|
 | "composer.json tidak valid" | Pastikan file tidak corrupt. Coba download ulang. |
 | "Class not found" | Jalankan `composer install` di folder project. |
-| "Gagal membaca PDF" | PDF harus berisi teks, bukan gambar scan. |
+| "Gagal membaca PDF" | PDF harus berisi teks, bukan gambar scan. Untuk scan, upload sebagai gambar. |
+| "PPT tidak didukung" | Simpan ulang presentasi sebagai `.pptx`, lalu upload lagi. |
 | "API Error" | Periksa API key di `.env`. Pastikan valid. |
 | "File too large" | Ubah `upload_max_filesize` di `php.ini` |
 | Frontend tidak responsif | Cek browser console (F12) untuk error. |
