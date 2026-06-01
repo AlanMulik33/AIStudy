@@ -224,55 +224,76 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
     foreach ($MODELS as $model) {
         $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent";
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Content-Type: application/json",
-            "x-goog-api-key: " . API_KEY
-        ]);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        // Retry logic dengan exponential backoff untuk rate limiting
+        $maxRetries = 2;
+        $retryDelay = 1; // detik
+        
+        for ($retry = 0; $retry <= $maxRetries; $retry++) {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Content-Type: application/json",
+                "x-goog-api-key: " . API_KEY
+            ]);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 90);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
 
-        if (!empty($curlError)) {
-            $lastError = "ERROR_CURL ($model): " . $curlError;
-            continue;
-        }
-
-        if ($httpCode !== 200) {
-            $err = json_decode($response, true);
-            $errorMsg = $err['error']['message'] ?? $err['error']['status'] ?? "HTTP $httpCode";
-
-            // Kalau error karena model unavailable atau high demand, coba model berikutnya
-            if (strpos($errorMsg, 'no longer available') !== false || 
-                strpos($errorMsg, 'high demand') !== false ||
-                strpos($errorMsg, 'not found') !== false) {
-                $lastError = "ERROR_API ($model): " . $errorMsg;
-                continue; // Coba model berikutnya
+            if (!empty($curlError)) {
+                $lastError = "ERROR_CURL ($model): " . $curlError;
+                if ($retry < $maxRetries) {
+                    sleep($retryDelay);
+                    $retryDelay *= 2;
+                    continue;
+                }
+                break;
             }
 
-            return "ERROR_API ($model): " . $errorMsg;
+            if ($httpCode !== 200) {
+                $err = json_decode($response, true);
+                $errorMsg = $err['error']['message'] ?? $err['error']['status'] ?? "HTTP $httpCode";
+
+                // Kalau rate limited, retry dengan delay
+                if (strpos($errorMsg, 'high demand') !== false || strpos($errorMsg, 'RESOURCE_EXHAUSTED') !== false) {
+                    if ($retry < $maxRetries) {
+                        sleep($retryDelay);
+                        $retryDelay *= 2;
+                        continue; // Retry dengan delay lebih panjang
+                    }
+                }
+
+                // Kalau model tidak tersedia, coba model berikutnya tanpa retry
+                if (strpos($errorMsg, 'not found') !== false || 
+                    strpos($errorMsg, 'no longer available') !== false) {
+                    $lastError = "ERROR_API ($model): " . $errorMsg;
+                    break; // Skip ke model berikutnya
+                }
+
+                return "ERROR_API ($model): " . $errorMsg;
+            }
+
+            $result = json_decode($response, true);
+
+            if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
+                $LAST_GEMINI_SOURCES = extractGeminiSources($result);
+                return $result['candidates'][0]['content']['parts'][0]['text'];
+            }
+
+            if (isset($result['candidates'][0]['finishReason']) && $result['candidates'][0]['finishReason'] === 'SAFETY') {
+                return "ERROR: Konten diblokir oleh filter keamanan Google.";
+            }
+
+            $lastError = "ERROR: Format respons tidak dikenali dari model $model.";
+            break; // Exit retry loop jika berhasil connect tapi response format salah
         }
-
-        $result = json_decode($response, true);
-
-        if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
-            $LAST_GEMINI_SOURCES = extractGeminiSources($result);
-            return $result['candidates'][0]['content']['parts'][0]['text'];
-        }
-
-        if (isset($result['candidates'][0]['finishReason']) && $result['candidates'][0]['finishReason'] === 'SAFETY') {
-            return "ERROR: Konten diblokir oleh filter keamanan Google.";
-        }
-
-        $lastError = "ERROR: Format respons tidak dikenali dari model $model.";
     }
 
-    return $lastError . "\n\nSemua model telah dicoba. Silakan coba lagi nanti atau periksa API key.";
+    return $lastError . "\n\nBila error berlanjut: periksa API key, atau tunggu beberapa menit (rate limiting).";
 }
 
 // Database Functions untuk menyimpan percakapan
