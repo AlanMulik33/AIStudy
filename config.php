@@ -24,12 +24,11 @@ if (!is_dir(__DIR__ . '/data')) {
     mkdir(__DIR__ . '/data', 0755, true);
 }
 
-// Daftar model yang dicoba secara berurutan (fallback) - ditambah model cadangan
+// Daftar model yang dicoba secara berurutan (fallback) - Model valid di v1beta API
 $MODELS = [
-    'gemini-2.5-flash',      // Model terbaru dan terbaik
-    'gemini-1.5-pro',        // Model fallback 1
-    'gemini-1.5-flash',      // Model fallback 2
-    'gemini-pro',            // Model lama tapi stable
+    'gemini-2.0-flash',      // Model terbaru (if available)
+    'gemini-1.5-flash',      // Model cepat dan reliable
+    'gemini-1.5-pro',        // Model lebih powerful
 ];
 
 function extractPDF($filePath) {
