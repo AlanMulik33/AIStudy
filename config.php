@@ -341,7 +341,7 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
 
     return $lastError . "\n\n💡 Tips: Jika error berlanjut, coba dengan pertanyaan yang lebih singkat atau file yang lebih kecil.";
 }
-}
+
 
 // Database Functions untuk menyimpan percakapan
 function getDB() {
