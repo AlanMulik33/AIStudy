@@ -75,6 +75,33 @@
         .qa-input:focus { border-color: var(--primary); }
         .qa-input::placeholder { color: var(--text-muted); }
 
+        .qa-mode-switch {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.5rem;
+            padding: 0.35rem;
+            margin-bottom: 0.75rem;
+            border-radius: 12px;
+            background: var(--bg);
+            border: 1px solid var(--surface-light);
+        }
+        .qa-mode-btn {
+            min-height: 2.5rem;
+            border: 0;
+            border-radius: 9px;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.86rem;
+            font-weight: 700;
+            transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .qa-mode-btn.active {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 0 8px 18px rgba(99, 102, 241, 0.22);
+        }
+
         .qa-attachments {
             display: flex;
             align-items: center;
@@ -541,6 +568,10 @@
 
         <div class="qa-section">
             <div class="section-title">&#128172; Tanya Jawab</div>
+            <div class="qa-mode-switch" aria-label="Pilih gaya jawaban">
+                <button class="qa-mode-btn active" type="button" data-qa-style="study">Study Mode</button>
+                <button class="qa-mode-btn" type="button" data-qa-style="bff">BFF Chat</button>
+            </div>
             <input type="text" class="qa-input" id="qaInput" placeholder="Tanya apa saja..." />
             <div class="qa-attachments">
                 <button class="btn-attach" id="btnQaAttach" type="button">&#128206; Lampirkan PDF/TXT/PPTX/Gambar</button>
@@ -638,6 +669,7 @@
         var currentTool = 'ringkasan';
         var lastResult = '';
         var qaHistory = [];
+        var qaStyle = 'study';
         var materialVisible = false;
         var textVisible = false;
         var hasMaterial = false;
@@ -673,6 +705,7 @@
         var warningBox = document.getElementById('warningBox');
         var btnCopy = document.getElementById('btnCopy');
         var btnDownload = document.getElementById('btnDownload');
+        var qaModeButtons = document.querySelectorAll('.qa-mode-btn');
 
         function updateMaterialStatus() {
             hasMaterial = currentFile !== null || rawText.value.trim().length > 0;
@@ -707,6 +740,13 @@
         });
 
         btnQaAttach.addEventListener('click', function() { fileInput.click(); });
+        qaModeButtons.forEach(function(button) {
+            button.addEventListener('click', function() {
+                qaStyle = button.getAttribute('data-qa-style') || 'study';
+                qaModeButtons.forEach(function(item) { item.classList.remove('active'); });
+                button.classList.add('active');
+            });
+        });
         btnNewChat.addEventListener('click', function() {
             qaHistory = [];
             qaInput.value = '';
@@ -833,6 +873,7 @@
             if (question) formData.append('question', question);
             if (mode === 'qa') {
                 formData.append('history', JSON.stringify(qaHistory.slice(-8)));
+                formData.append('qa_style', qaStyle);
             }
 
             fetch('api.php', {

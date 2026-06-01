@@ -20,6 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $mode = $_POST['mode'] ?? 'qa';
 $question = $_POST['question'] ?? '';
+$qaStyle = $_POST['qa_style'] ?? 'study';
+if (!in_array($qaStyle, ['study', 'bff'], true)) {
+    $qaStyle = 'study';
+}
 $historyJson = $_POST['history'] ?? '[]';
 $conversationHistory = [];
 
@@ -211,6 +215,11 @@ switch ($mode) {
             $system = str_replace('{{ISI_PDF}}', $material, $SYSTEM_QA);
         } else {
             $system = 'Kamu adalah AI Study Helper, asisten belajar cerdas untuk mahasiswa Indonesia. Jawab pertanyaan dengan bahasa yang ramah, jelas, dan mudah dipahami. Berikan contoh konkret jika membantu.';
+        }
+        if ($qaStyle === 'bff') {
+            $system .= "\n\nGaya jawaban: BFF Chat. Jawab seperti teman dekat yang santai, hangat, suportif, dan natural. Boleh pakai bahasa sehari-hari, tetapi tetap akurat, tidak mengarang, dan tetap jelaskan poin penting dengan jelas. Jika user sedang belajar atau bertanya tentang materi, bantu seperti teman belajar yang sabar.";
+        } else {
+            $system .= "\n\nGaya jawaban: Study Mode. Jawab dengan struktur belajar yang rapi, fokus, mudah dipahami, dan cocok untuk mahasiswa. Prioritaskan definisi, langkah, contoh, dan kesimpulan singkat jika membantu.";
         }
         if ($historyContext !== '') {
             $system .= "\n\n" . $historyContext . "\nGunakan riwayat ini untuk memahami pertanyaan lanjutan, tetapi tetap prioritaskan materi/lampiran terbaru jika ada.";
