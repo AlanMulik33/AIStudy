@@ -45,6 +45,6 @@ echo Tekan Ctrl+C untuk menghentikan server.
 echo.
 
 start "" "%URL%"
-php -S %HOST%:%PORT%
+php -d upload_max_filesize=25M -d post_max_size=30M -d max_file_uploads=20 -S %HOST%:%PORT%
 
 endlocal

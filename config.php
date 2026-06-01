@@ -86,7 +86,7 @@ function extractPPTX($filePath) {
     return implode("\n\n", $slides);
 }
 
-function createImagePart($filePath, $mimeType) {
+function createInlineDataPart($filePath, $mimeType) {
     $bytes = file_get_contents($filePath);
     if ($bytes === false) {
         return null;
@@ -98,6 +98,52 @@ function createImagePart($filePath, $mimeType) {
             "data" => base64_encode($bytes)
         ]
     ];
+}
+
+function createImagePart($filePath, $mimeType) {
+    return createInlineDataPart($filePath, $mimeType);
+}
+
+function extractPPTXImageParts($filePath, $maxImages = 8) {
+    if (!class_exists('ZipArchive')) {
+        return [];
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($filePath) !== true) {
+        return [];
+    }
+
+    $mimeMap = [
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+    ];
+    $parts = [];
+
+    for ($i = 0; $i < $zip->numFiles && count($parts) < $maxImages; $i++) {
+        $name = $zip->getNameIndex($i);
+        if (!preg_match('#^ppt/media/.+\.(jpg|jpeg|png|webp)$#i', $name, $matches)) {
+            continue;
+        }
+
+        $bytes = $zip->getFromIndex($i);
+        if ($bytes === false) {
+            continue;
+        }
+
+        $ext = strtolower($matches[1]);
+        $parts[] = [
+            "inline_data" => [
+                "mime_type" => $mimeMap[$ext],
+                "data" => base64_encode($bytes)
+            ]
+        ];
+    }
+
+    $zip->close();
+    return $parts;
 }
 
 function extractGeminiSources($result) {

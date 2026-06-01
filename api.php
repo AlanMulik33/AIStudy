@@ -26,7 +26,28 @@ $sourceType = 'none';
 $hasMaterial = false;
 $extraParts = [];
 
+function uploadErrorMessage($code) {
+    $uploadMax = ini_get('upload_max_filesize');
+    $postMax = ini_get('post_max_size');
+    $messages = [
+        UPLOAD_ERR_INI_SIZE => "File terlalu besar. Batas PHP saat ini: upload_max_filesize=$uploadMax, post_max_size=$postMax.",
+        UPLOAD_ERR_FORM_SIZE => 'File terlalu besar untuk form upload.',
+        UPLOAD_ERR_PARTIAL => 'Upload file tidak lengkap. Coba upload ulang.',
+        UPLOAD_ERR_NO_FILE => 'Tidak ada file yang diterima server.',
+        UPLOAD_ERR_NO_TMP_DIR => 'Folder temporary upload PHP tidak tersedia.',
+        UPLOAD_ERR_CANT_WRITE => 'Server gagal menyimpan file upload sementara.',
+        UPLOAD_ERR_EXTENSION => 'Upload dihentikan oleh ekstensi PHP.',
+    ];
+
+    return $messages[$code] ?? 'Upload file gagal dengan kode error: ' . $code;
+}
+
 // Handle file upload (PDF, TXT, PPTX, or image)
+if (isset($_FILES['file']) && $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+    echo json_encode(['error' => uploadErrorMessage($_FILES['file']['error'])]);
+    exit;
+}
+
 if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
     $tmpPath = $_FILES['file']['tmp_name'];
     $originalName = $_FILES['file']['name'] ?? '';
@@ -34,13 +55,31 @@ if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
     $mimeType = $_FILES['file']['type'] ?? '';
 
     if ($ext === 'pdf') {
-        $material = extractPDF($tmpPath);
+        $pdfPart = createInlineDataPart($tmpPath, 'application/pdf');
+        if ($pdfPart === null) {
+            echo json_encode(['error' => 'Gagal membaca PDF yang diupload.']);
+            exit;
+        }
+        $extraParts[] = $pdfPart;
+        $extractedText = extractPDF($tmpPath);
+        if (strpos($extractedText, 'ERROR') === 0 || trim($extractedText) === '') {
+            $material = 'User mengunggah PDF. Baca dan analisis isi PDF yang dilampirkan langsung.';
+        } else {
+            $material = $extractedText;
+        }
         $sourceType = 'pdf';
     } elseif ($ext === 'txt') {
         $material = extractText($tmpPath);
         $sourceType = 'txt';
     } elseif ($ext === 'pptx') {
         $material = extractPPTX($tmpPath);
+        $pptxImageParts = extractPPTXImageParts($tmpPath);
+        foreach ($pptxImageParts as $part) {
+            $extraParts[] = $part;
+        }
+        if (strpos($material, 'ERROR') === 0 && !empty($pptxImageParts)) {
+            $material = 'User mengunggah PPTX. Teks slide tidak bisa diekstrak, tetapi gambar dari slide dilampirkan. Analisis gambar slide tersebut.';
+        }
         $sourceType = 'pptx';
     } elseif ($ext === 'ppt') {
         echo json_encode(['error' => 'File .ppt lama belum didukung. Simpan ulang presentasi sebagai .pptx lalu upload lagi.']);
@@ -149,7 +188,7 @@ switch ($mode) {
         $system .= "\n3. Jika ada beberapa sumber yang berbeda, sebutkan jawaban yang paling konsisten dan tambahkan catatan singkat bahwa jadwal bisa berubah.";
         $system .= "\n4. Jika hasil pencarian tidak memuat jawaban yang jelas, baru katakan bahwa datanya belum bisa dipastikan.";
         $system .= "\n5. Jangan mencantumkan daftar sumber di teks jawaban karena aplikasi akan menampilkan sumber secara terpisah.";
-        $useGoogleSearch = true;
+        $useGoogleSearch = !$hasMaterial;
         $prompt = $question;
         break;
     case 'ringkasan':
