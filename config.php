@@ -16,9 +16,20 @@ define('API_KEY', $apiKey);
 define('MAX_TOKENS', (int)($_ENV['MAX_TOKENS'] ?? 8000));
 $LAST_GEMINI_SOURCES = [];
 
-// Daftar model yang dicoba secara berurutan (fallback)
+// Database
+$DB_PATH = __DIR__ . '/data/conversations.db';
+
+// Buat folder data jika belum ada
+if (!is_dir(__DIR__ . '/data')) {
+    mkdir(__DIR__ . '/data', 0755, true);
+}
+
+// Daftar model yang dicoba secara berurutan (fallback) - ditambah model cadangan
 $MODELS = [
-    'gemini-2.5-flash',
+    'gemini-2.5-flash',      // Model terbaru dan terbaik
+    'gemini-1.5-pro',        // Model fallback 1
+    'gemini-1.5-flash',      // Model fallback 2
+    'gemini-pro',            // Model lama tapi stable
 ];
 
 function extractPDF($filePath) {
@@ -266,3 +277,124 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
 
     return $lastError . "\n\nSemua model telah dicoba. Silakan coba lagi nanti atau periksa API key.";
 }
+
+// Database Functions untuk menyimpan percakapan
+function getDB() {
+    global $DB_PATH;
+    try {
+        $db = new PDO('sqlite:' . $DB_PATH);
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        return $db;
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function initDB() {
+    $db = getDB();
+    if (!$db) return false;
+    
+    try {
+        $db->exec("CREATE TABLE IF NOT EXISTS conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            summary TEXT
+        )");
+        
+        $db->exec("CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+            content TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+        )");
+        
+        $db->exec("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)");
+        $db->exec("CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at DESC)");
+        
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+function saveConversation($title, $messages) {
+    $db = getDB();
+    if (!$db) return null;
+    
+    try {
+        $db->beginTransaction();
+        
+        $stmt = $db->prepare("INSERT INTO conversations (title, summary) VALUES (?, ?)");
+        $summary = substr($title, 0, 100);
+        $stmt->execute([$title, $summary]);
+        $convId = $db->lastInsertId();
+        
+        $msgStmt = $db->prepare("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)");
+        foreach ($messages as $msg) {
+            $msgStmt->execute([$convId, $msg['role'], $msg['content']]);
+        }
+        
+        $db->commit();
+        return $convId;
+    } catch (Exception $e) {
+        $db->rollBack();
+        return null;
+    }
+}
+
+function getConversations($limit = 20) {
+    $db = getDB();
+    if (!$db) return [];
+    
+    try {
+        $stmt = $db->prepare("SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC LIMIT ?");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        return [];
+    }
+}
+
+function getConversationMessages($convId) {
+    $db = getDB();
+    if (!$db) return [];
+    
+    try {
+        $stmt = $db->prepare("SELECT role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC");
+        $stmt->execute([$convId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        return [];
+    }
+}
+
+function updateConversationTitle($convId, $title) {
+    $db = getDB();
+    if (!$db) return false;
+    
+    try {
+        $stmt = $db->prepare("UPDATE conversations SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+        return $stmt->execute([$title, $convId]);
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+function deleteConversation($convId) {
+    $db = getDB();
+    if (!$db) return false;
+    
+    try {
+        $stmt = $db->prepare("DELETE FROM conversations WHERE id = ?");
+        return $stmt->execute([$convId]);
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+// Initialize DB on first load
+initDB();
