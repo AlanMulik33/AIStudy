@@ -180,6 +180,34 @@ function extractGeminiSources($result) {
     return array_values($sources);
 }
 
+// Chunk large text to avoid prompt size limits
+function chunkLargeText($text, $maxSize = 30000) {
+    $lines = explode("\n\n", $text); // Split by double newline (paragraphs)
+    
+    if (count($lines) <= 1) {
+        // If single paragraph, just truncate with note
+        if (strlen($text) > $maxSize) {
+            return substr($text, 0, $maxSize) . "\n\n[... materi dipotong karena terlalu panjang ...]";
+        }
+        return $text;
+    }
+
+    // Try to fit as many paragraphs as possible
+    $result = $lines[0]; // Start with first line
+    
+    for ($i = 1; $i < count($lines); $i++) {
+        $nextSection = $lines[$i];
+        if (strlen($result) + strlen($nextSection) + 4 < $maxSize) { // +4 for \n\n
+            $result .= "\n\n" . $nextSection;
+        } else {
+            break;
+        }
+    }
+
+    $result .= "\n\n[... materi panjang dipotong untuk efisiensi pemrosesan ...]";
+    return $result;
+}
+
 function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperature = 0.4, $extraParts = []) {
     global $MODELS, $LAST_GEMINI_SOURCES;
 
@@ -191,6 +219,15 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
         $fullPrompt = $system . "\n\n=== PERTANYAAN / TUGAS ===\n" . $prompt;
     } else {
         $fullPrompt = $prompt;
+    }
+
+    // Check if prompt is too large and needs chunking
+    $promptSize = strlen($fullPrompt);
+    $maxPromptSize = 30000; // 30KB limit
+    
+    if ($promptSize > $maxPromptSize && strpos($fullPrompt, "\n\n") !== false) {
+        // Chunk the material if it's too large
+        $fullPrompt = chunkLargeText($fullPrompt, $maxPromptSize);
     }
 
     $parts = [["text" => $fullPrompt]];
@@ -220,12 +257,12 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
     }
 
     $lastError = "";
+    $maxRetries = 3; // Increased from 2
 
     foreach ($MODELS as $model) {
         $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent";
 
         // Retry logic dengan exponential backoff untuk rate limiting
-        $maxRetries = 2;
         $retryDelay = 1; // detik
         
         for ($retry = 0; $retry <= $maxRetries; $retry++) {
@@ -236,8 +273,8 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
             ]);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 90);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Increased from 90
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15); // Increased from 10
 
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -248,7 +285,7 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
                 $lastError = "ERROR_CURL ($model): " . $curlError;
                 if ($retry < $maxRetries) {
                     sleep($retryDelay);
-                    $retryDelay *= 2;
+                    $retryDelay = min($retryDelay * 2, 8); // Max 8 second delay
                     continue;
                 }
                 break;
@@ -258,23 +295,32 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
                 $err = json_decode($response, true);
                 $errorMsg = $err['error']['message'] ?? $err['error']['status'] ?? "HTTP $httpCode";
 
-                // Kalau rate limited, retry dengan delay
-                if (strpos($errorMsg, 'high demand') !== false || strpos($errorMsg, 'RESOURCE_EXHAUSTED') !== false) {
+                // Rate limited - retry dengan delay lebih panjang
+                if (strpos($errorMsg, 'high demand') !== false || 
+                    strpos($errorMsg, 'RESOURCE_EXHAUSTED') !== false ||
+                    strpos($errorMsg, 'too many requests') !== false ||
+                    strpos($errorMsg, 'RATE_LIMIT_EXCEEDED') !== false) {
+                    
                     if ($retry < $maxRetries) {
+                        // Don't return error yet, retry dengan delay
                         sleep($retryDelay);
-                        $retryDelay *= 2;
-                        continue; // Retry dengan delay lebih panjang
+                        $retryDelay = min($retryDelay * 2, 10);
+                        continue;
                     }
+                    
+                    $lastError = "⏳ Server AI sedang sibuk setelah $maxRetries percobaan.\nSilakan coba lagi dalam beberapa saat.";
+                    break;
                 }
 
-                // Kalau model tidak tersedia, coba model berikutnya tanpa retry
+                // Model tidak tersedia - skip ke model berikutnya
                 if (strpos($errorMsg, 'not found') !== false || 
                     strpos($errorMsg, 'no longer available') !== false) {
                     $lastError = "ERROR_API ($model): " . $errorMsg;
                     break; // Skip ke model berikutnya
                 }
 
-                return "ERROR_API ($model): " . $errorMsg;
+                // Other errors - return immediately
+                return "❌ ERROR_API ($model): " . $errorMsg;
             }
 
             $result = json_decode($response, true);
@@ -285,15 +331,16 @@ function callGemini($prompt, $system = "", $useGoogleSearch = false, $temperatur
             }
 
             if (isset($result['candidates'][0]['finishReason']) && $result['candidates'][0]['finishReason'] === 'SAFETY') {
-                return "ERROR: Konten diblokir oleh filter keamanan Google.";
+                return "❌ ERROR: Konten diblokir oleh filter keamanan Google.";
             }
 
             $lastError = "ERROR: Format respons tidak dikenali dari model $model.";
-            break; // Exit retry loop jika berhasil connect tapi response format salah
+            break; // Exit retry loop
         }
     }
 
-    return $lastError . "\n\nBila error berlanjut: periksa API key, atau tunggu beberapa menit (rate limiting).";
+    return $lastError . "\n\n💡 Tips: Jika error berlanjut, coba dengan pertanyaan yang lebih singkat atau file yang lebih kecil.";
+}
 }
 
 // Database Functions untuk menyimpan percakapan

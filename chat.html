@@ -344,6 +344,38 @@
             background: var(--surface);
         }
 
+        .file-preview {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--success);
+            font-size: 0.9rem;
+        }
+
+        .file-preview.show {
+            display: flex;
+        }
+
+        .file-preview-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .file-preview-remove {
+            background: none;
+            border: none;
+            color: var(--success);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0;
+        }
+
         .input-wrapper {
             display: flex;
             gap: 0.75rem;
@@ -357,8 +389,14 @@
             gap: 0.5rem;
         }
 
+        .input-controls {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
         .input-field {
-            width: 100%;
+            flex: 1;
             padding: 0.75rem;
             background: var(--bg);
             border: 1px solid var(--surface-light);
@@ -381,21 +419,28 @@
 
         .input-actions {
             display: flex;
-            gap: 0.5rem;
-            font-size: 0.85rem;
+            gap: 0.75rem;
+            align-items: center;
         }
 
         .btn-attach {
-            background: none;
-            border: none;
-            color: var(--text-muted);
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid var(--primary);
+            color: var(--primary);
             cursor: pointer;
-            padding: 0;
-            transition: color 0.2s;
+            padding: 0.6rem;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 40px;
+            min-height: 40px;
         }
 
         .btn-attach:hover {
-            color: var(--primary);
+            background: rgba(99, 102, 241, 0.3);
         }
 
         .btn-send {
@@ -518,12 +563,20 @@
 
         <!-- Input Area -->
         <div class="input-area">
+            <div class="file-preview" id="filePreview">
+                <div class="file-preview-info">
+                    <span>📎</span>
+                    <span id="fileName"></span>
+                </div>
+                <button class="file-preview-remove" id="removeFile" type="button">✕</button>
+            </div>
             <div class="input-wrapper">
                 <div class="input-box" style="flex: 1;">
-                    <textarea class="input-field" id="messageInput" placeholder="Ketik pertanyaan..." rows="1"></textarea>
+                    <textarea class="input-field" id="messageInput" placeholder="Ketik pertanyaan... atau lampirkan file (PDF/TXT/PPTX/Gambar)" rows="1"></textarea>
                     <div class="input-actions">
-                        <button class="btn-attach" id="btnAttach" title="Lampirkan file">📎</button>
+                        <button class="btn-attach" id="btnAttach" title="Lampirkan file">📎 Lampir</button>
                         <input type="file" id="fileInput" accept=".pdf,.txt,.pptx,.jpg,.jpeg,.png,.webp" style="display: none;">
+                        <span style="color: var(--text-muted); font-size: 0.8rem;">Max 20MB</span>
                     </div>
                 </div>
                 <button class="btn-send" id="btnSend">➤</button>
@@ -549,6 +602,17 @@
         let qaStyle = 'study';
         let currentFile = null;
         let isLoading = false;
+
+        // File preview setup
+        const filePreview = document.getElementById('filePreview');
+        const fileName = document.getElementById('fileName');
+        const removeFile = document.getElementById('removeFile');
+
+        removeFile.addEventListener('click', () => {
+            currentFile = null;
+            fileInput.value = '';
+            filePreview.classList.remove('show');
+        });
 
         // Auto-resize textarea
         messageInput.addEventListener('input', () => {
@@ -611,8 +675,10 @@
             }
 
             currentFile = file;
-            const status = `📎 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`;
-            alert(`File dipilih: ${status}`);
+            const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+            const fileInfo = `${file.name} (${sizeMB}MB)`;
+            fileName.textContent = fileInfo;
+            filePreview.classList.add('show');
         }
 
         async function sendMessage() {
@@ -635,6 +701,7 @@
             // Show loading
             isLoading = true;
             showLoadingIndicator();
+            btnSend.disabled = true;
 
             try {
                 const formData = new FormData();
