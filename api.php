@@ -275,6 +275,21 @@ if (strpos($result, 'ERROR') === 0) {
     exit;
 }
 
+// Save conversation for QA mode
+$convId = null;
+if ($mode === 'qa') {
+    $conversationHistory[] = ['role' => 'user', 'content' => $question];
+    $conversationHistory[] = ['role' => 'assistant', 'content' => $result];
+    
+    // Generate a title from the first question
+    $title = substr($question, 0, 100);
+    if (strlen($question) > 100) {
+        $title .= '...';
+    }
+    
+    $convId = saveConversation($title, array_slice($conversationHistory, -20)); // Save last 20 messages
+}
+
 $response = [
     'success' => true,
     'result' => $result,
@@ -282,6 +297,12 @@ $response = [
     'source' => $sourceType,
     'sources' => $LAST_GEMINI_SOURCES ?? []
 ];
+
+// Add conversation ID if available
+if ($convId) {
+    $response['conversation_id'] = $convId;
+}
+
 if (!empty($warning)) {
     $response['warning'] = $warning;
 }
