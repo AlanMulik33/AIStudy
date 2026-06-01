@@ -557,10 +557,128 @@
             font-size: 0.8rem;
             padding: 1.5rem 0;
         }
+
+        .conversations-panel {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 300px;
+            height: 100vh;
+            background: var(--surface);
+            border-right: 1px solid var(--surface-light);
+            overflow-y: auto;
+            padding: 1rem;
+            z-index: 100;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+        }
+        .conversations-panel.show {
+            transform: translateX(0);
+        }
+        .conversations-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--surface-light);
+        }
+        .conversations-header h3 {
+            font-size: 1rem;
+            color: var(--text);
+        }
+        .close-panel {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+        .close-panel:hover {
+            color: var(--text);
+        }
+        .conversations-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .conversation-item {
+            padding: 0.75rem;
+            background: var(--bg);
+            border: 1px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+        .conversation-item:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+        .conversation-item.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .conversation-item-date {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 0.25rem;
+        }
+        .toggle-panel {
+            position: fixed;
+            bottom: 2rem;
+            left: 1rem;
+            z-index: 99;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary);
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            transition: all 0.3s;
+            display: none;
+        }
+        .toggle-panel:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.6);
+        }
+        .toggle-panel.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        @media (max-width: 768px) {
+            .conversations-panel {
+                width: 250px;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Conversations Panel -->
+    <div class="conversations-panel" id="conversationsPanel">
+        <div class="conversations-header">
+            <h3>💬 Percakapan</h3>
+            <button class="close-panel" id="closePanelBtn" type="button">✕</button>
+        </div>
+        <div class="conversations-list" id="conversationsList">
+            <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem 0;">Belum ada percakapan</p>
+        </div>
+    </div>
+    
+    <!-- Toggle Panel Button -->
+    <button class="toggle-panel" id="togglePanelBtn" type="button">💬</button>
+
+    <div class="container" id="mainContainer">
         <header>
             <h1>AI Study Helper</h1>
             <p>Tanya apa saja, atau upload materi</p>
@@ -570,7 +688,7 @@
             <div class="section-title">&#128172; Tanya Jawab</div>
             <div class="qa-mode-switch" aria-label="Pilih gaya jawaban">
                 <button class="qa-mode-btn active" type="button" data-qa-style="study">Study Mode</button>
-                <button class="qa-mode-btn" type="button" data-qa-style="bff">BFF Chat</button>
+                <button class="qa-mode-btn" type="button" data-qa-style="bff">ChitChat</button>
             </div>
             <input type="text" class="qa-input" id="qaInput" placeholder="Tanya apa saja..." />
             <div class="qa-attachments">
@@ -673,6 +791,14 @@
         var materialVisible = false;
         var textVisible = false;
         var hasMaterial = false;
+        var currentConvId = null;
+        var panelOpen = false;
+
+        // DOM Elements
+        var conversationsPanel = document.getElementById('conversationsPanel');
+        var conversationsList = document.getElementById('conversationsList');
+        var togglePanelBtn = document.getElementById('togglePanelBtn');
+        var closePanelBtn = document.getElementById('closePanelBtn');
 
         var qaInput = document.getElementById('qaInput');
         var btnAsk = document.getElementById('btnAsk');
@@ -706,6 +832,130 @@
         var btnCopy = document.getElementById('btnCopy');
         var btnDownload = document.getElementById('btnDownload');
         var qaModeButtons = document.querySelectorAll('.qa-mode-btn');
+
+        // Load conversations on page load
+        function loadConversations() {
+            fetch('conversations.php?action=list&limit=30')
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.success && data.data && data.data.length > 0) {
+                        renderConversationsList(data.data);
+                        togglePanelBtn.classList.add('show');
+                    }
+                })
+                .catch(function(err) {
+                    console.log('Failed to load conversations:', err);
+                });
+        }
+
+        // Render conversations list
+        function renderConversationsList(conversations) {
+            var html = '';
+            conversations.forEach(function(conv) {
+                var date = new Date(conv.updated_at);
+                var dateStr = formatDate(date);
+                var title = escapeHTML(conv.title || 'Tanpa judul');
+                var isActive = conv.id === currentConvId ? ' active' : '';
+                html += '<div class="conversation-item' + isActive + '" data-conv-id="' + conv.id + '" title="' + title + '">';
+                html += '<span style="display:block;overflow:hidden;text-overflow:ellipsis;">' + title + '</span>';
+                html += '<span class="conversation-item-date">' + dateStr + '</span>';
+                html += '</div>';
+            });
+            conversationsList.innerHTML = html;
+
+            // Add click handlers
+            document.querySelectorAll('.conversation-item').forEach(function(item) {
+                item.addEventListener('click', function() {
+                    var convId = parseInt(item.getAttribute('data-conv-id'));
+                    loadConversation(convId);
+                });
+            });
+        }
+
+        // Load a specific conversation
+        function loadConversation(convId) {
+            fetch('conversations.php?action=get&id=' + convId)
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.success && data.data) {
+                        qaHistory = data.data.map(function(msg) {
+                            return {
+                                role: msg.role,
+                                content: msg.content
+                            };
+                        });
+                        currentConvId = convId;
+                        
+                        // Update active state
+                        document.querySelectorAll('.conversation-item').forEach(function(item) {
+                            item.classList.remove('active');
+                            if (parseInt(item.getAttribute('data-conv-id')) === convId) {
+                                item.classList.add('active');
+                            }
+                        });
+                        
+                        // Close panel on mobile
+                        if (window.innerWidth < 768) {
+                            closePanel();
+                        }
+                        
+                        // Show last message if available
+                        if (qaHistory.length > 0) {
+                            var lastMsg = qaHistory[qaHistory.length - 1];
+                            if (lastMsg.role === 'assistant') {
+                                lastResult = lastMsg.content;
+                                renderResult(lastMsg.content, 'qa');
+                                result.classList.add('show');
+                                result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                        }
+                        
+                        showError('Percakapan dimuat. Lanjutkan dengan pertanyaan baru atau lihat riwayat di atas.');
+                    }
+                })
+                .catch(function(err) {
+                    showError('Gagal memuat percakapan: ' + err.message);
+                });
+        }
+
+        // Format date for display
+        function formatDate(date) {
+            var now = new Date();
+            var diff = now - date;
+            var minutes = Math.floor(diff / 60000);
+            var hours = Math.floor(diff / 3600000);
+            var days = Math.floor(diff / 86400000);
+            
+            if (minutes < 1) return 'Baru saja';
+            if (minutes < 60) return minutes + ' menit lalu';
+            if (hours < 24) return hours + ' jam lalu';
+            if (days < 7) return days + ' hari lalu';
+            
+            return date.toLocaleDateString('id-ID', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        // Panel controls
+        function togglePanel() {
+            panelOpen = !panelOpen;
+            if (panelOpen) {
+                conversationsPanel.classList.add('show');
+                loadConversations();
+            } else {
+                conversationsPanel.classList.remove('show');
+            }
+        }
+
+        function closePanel() {
+            panelOpen = false;
+            conversationsPanel.classList.remove('show');
+        }
+
+        togglePanelBtn.addEventListener('click', togglePanel);
+        closePanelBtn.addEventListener('click', closePanel);
 
         function updateMaterialStatus() {
             hasMaterial = currentFile !== null || rawText.value.trim().length > 0;
@@ -749,12 +999,18 @@
         });
         btnNewChat.addEventListener('click', function() {
             qaHistory = [];
+            currentConvId = null;
             qaInput.value = '';
             result.classList.remove('show');
             sourceList.classList.remove('show');
             sourceList.innerHTML = '';
             hideError();
             hideWarning();
+            
+            // Remove active state from all conversation items
+            document.querySelectorAll('.conversation-item').forEach(function(item) {
+                item.classList.remove('active');
+            });
         });
         qaAttachmentRemove.addEventListener('click', function() {
             currentFile = null;
@@ -892,6 +1148,14 @@
                         qaHistory.push({ role: 'user', content: question });
                         qaHistory.push({ role: 'assistant', content: data.result });
                         qaHistory = qaHistory.slice(-10);
+                        
+                        // Update conversation ID if this is a new conversation response
+                        if (data.conversation_id && !currentConvId) {
+                            currentConvId = data.conversation_id;
+                        }
+                        
+                        // Reload conversations list to show the updated conversation
+                        loadConversations();
                     }
                     if (data.warning) {
                         resultWarning.textContent = '\u26A0\uFE0F ' + data.warning;
@@ -1077,6 +1341,7 @@
         function hideWarning() { warningBox.classList.remove('show'); }
 
         updateMaterialStatus();
+        loadConversations();
     })();
     </script>
 </body>
