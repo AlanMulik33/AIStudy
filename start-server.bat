@@ -44,7 +44,7 @@ echo Server berjalan di %URL%
 echo Tekan Ctrl+C untuk menghentikan server.
 echo.
 
-start "" "%URL%"
+start "" "%URL%/chat.html"
 php -d upload_max_filesize=25M -d post_max_size=30M -d max_file_uploads=20 -S %HOST%:%PORT%
 
 endlocal
