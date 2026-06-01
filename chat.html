@@ -172,6 +172,42 @@
             color: var(--text);
         }
 
+        /* Toggle Sidebar Button */
+        .btn-toggle-sidebar {
+            display: none;
+            width: 40px;
+            height: 40px;
+            background: var(--surface-light);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text);
+            font-size: 1.25rem;
+            transition: all 0.2s;
+            padding: 0;
+        }
+
+        .btn-toggle-sidebar:hover {
+            background: var(--primary);
+            transform: scale(1.05);
+        }
+
+        /* Sidebar overlay untuk mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+        }
+
         /* Messages Area */
         .messages {
             flex: 1;
@@ -480,14 +516,21 @@
 
         /* Responsive */
         @media (max-width: 768px) {
+            .btn-toggle-sidebar {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
             .sidebar {
                 position: fixed;
                 left: 0;
                 top: 0;
-                height: 100%;
+                height: 100vh;
                 z-index: 1000;
                 transform: translateX(-100%);
-                transition: transform 0.3s;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
             }
 
             .sidebar.mobile-open {
@@ -540,10 +583,14 @@
         </div>
     </div>
 
+    <!-- Sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
     <!-- Main Chat -->
     <div class="chat-container">
         <!-- Header -->
         <div class="chat-header">
+            <button class="btn-toggle-sidebar" id="btnToggleSidebar" title="Menu">☰</button>
             <div class="chat-header-title" id="chatTitle">Mulai percakapan baru</div>
             <div class="chat-settings">
                 <div class="qa-mode-switch">
@@ -586,6 +633,8 @@
 
     <script>
         const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const btnToggleSidebar = document.getElementById('btnToggleSidebar');
         const conversationsScroll = document.getElementById('conversationsScroll');
         const messages = document.getElementById('messages');
         const messageInput = document.getElementById('messageInput');
@@ -635,6 +684,30 @@
 
         btnStudy.addEventListener('click', () => switchMode('study'));
         btnBff.addEventListener('click', () => switchMode('bff'));
+
+        // Sidebar toggle
+        btnToggleSidebar.addEventListener('click', () => {
+            sidebar.classList.toggle('mobile-open');
+            sidebarOverlay.classList.toggle('active');
+        });
+
+        // Close sidebar when clicking overlay
+        sidebarOverlay.addEventListener('click', () => {
+            sidebar.classList.remove('mobile-open');
+            sidebarOverlay.classList.remove('active');
+        });
+
+        // Close sidebar when selecting conversation on mobile
+        conversationsScroll.addEventListener('click', (e) => {
+            if (e.target.classList.contains('conversation-item')) {
+                setTimeout(() => {
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.remove('mobile-open');
+                        sidebarOverlay.classList.remove('active');
+                    }
+                }, 100);
+            }
+        });
 
         function switchMode(mode) {
             qaStyle = mode;

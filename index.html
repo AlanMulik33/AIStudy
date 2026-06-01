@@ -26,6 +26,102 @@
             min-height: 100vh;
             line-height: 1.6;
         }
+
+        /* Navigation Bar */
+        .navbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--surface-light);
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar-brand {
+            font-size: 1.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .navbar-menu {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .navbar-menu a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .navbar-menu a:hover,
+        .navbar-menu a.active {
+            color: var(--text);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-toggle-menu {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .navbar-menu.mobile-show {
+            display: flex;
+            flex-direction: column;
+            position: absolute;
+            top: 100%;
+            right: 1rem;
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 8px;
+            gap: 0;
+            width: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .navbar-menu.mobile-show a {
+            padding: 0.75rem 1.5rem;
+            margin: 0;
+            border-bottom: 1px solid var(--surface-light);
+        }
+
+        .navbar-menu.mobile-show a:last-child {
+            border-bottom: none;
+        }
+
+        /* Responsive Navigation */
+        @media (max-width: 640px) {
+            .btn-toggle-menu {
+                display: block;
+            }
+
+            .navbar-menu {
+                display: none;
+            }
+
+            .navbar-menu.mobile-show {
+                display: flex;
+            }
+        }
+
         .container {
             max-width: 900px;
             margin: 0 auto;
@@ -664,6 +760,16 @@
     </style>
 </head>
 <body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <a href="index.html" class="navbar-brand">💬 AI Study Helper</a>
+        <button class="btn-toggle-menu" id="btnToggleMenu" title="Menu">☰</button>
+        <div class="navbar-menu" id="navbarMenu">
+            <a href="chat.html" class="nav-link">💬 Chat</a>
+            <a href="index.html" class="nav-link active">📄 Materi</a>
+        </div>
+    </nav>
+
     <!-- Conversations Panel -->
     <div class="conversations-panel" id="conversationsPanel">
         <div class="conversations-header">
@@ -680,8 +786,8 @@
 
     <div class="container" id="mainContainer">
         <header>
-            <h1>AI Study Helper</h1>
-            <p>Tanya apa saja, atau upload materi</p>
+            <h1>Tanya Jawab & Analisis Materi</h1>
+            <p>Upload materi atau tanya apa saja dengan AI</p>
         </header>
 
         <div class="qa-section">
@@ -832,6 +938,28 @@
         var btnCopy = document.getElementById('btnCopy');
         var btnDownload = document.getElementById('btnDownload');
         var qaModeButtons = document.querySelectorAll('.qa-mode-btn');
+
+        // Navbar toggle
+        var navbarMenu = document.getElementById('navbarMenu');
+        var btnToggleMenu = document.getElementById('btnToggleMenu');
+
+        btnToggleMenu?.addEventListener('click', function() {
+            navbarMenu.classList.toggle('mobile-show');
+        });
+
+        // Close menu when clicking a link
+        document.querySelectorAll('.nav-link').forEach(function(link) {
+            link.addEventListener('click', function() {
+                navbarMenu.classList.remove('mobile-show');
+            });
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.navbar')) {
+                navbarMenu.classList.remove('mobile-show');
+            }
+        });
 
         // Load conversations on page load
         function loadConversations() {
