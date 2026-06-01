@@ -20,6 +20,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $mode = $_POST['mode'] ?? 'qa';
 $question = $_POST['question'] ?? '';
+$historyJson = $_POST['history'] ?? '[]';
+$conversationHistory = [];
+
+if ($mode === 'qa' && is_string($historyJson) && $historyJson !== '') {
+    $decodedHistory = json_decode($historyJson, true);
+    if (is_array($decodedHistory)) {
+        $conversationHistory = array_slice($decodedHistory, -8);
+    }
+}
 
 $material = '';
 $sourceType = 'none';
@@ -173,12 +182,38 @@ $currentDateContext = sprintf(
     $now->format('Y')
 );
 
+$historyContext = '';
+if (!empty($conversationHistory)) {
+    $historyLines = [];
+    foreach ($conversationHistory as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $role = ($item['role'] ?? '') === 'assistant' ? 'AI' : 'User';
+        $content = trim((string)($item['content'] ?? ''));
+        if ($content === '') {
+            continue;
+        }
+
+        $content = preg_replace('/\s+/', ' ', $content);
+        $historyLines[] = $role . ': ' . substr($content, 0, 1200);
+    }
+
+    if (!empty($historyLines)) {
+        $historyContext = "Riwayat percakapan sebelumnya:\n" . implode("\n", $historyLines);
+    }
+}
+
 switch ($mode) {
     case 'qa':
         if ($hasMaterial && !empty($material)) {
             $system = str_replace('{{ISI_PDF}}', $material, $SYSTEM_QA);
         } else {
             $system = 'Kamu adalah AI Study Helper, asisten belajar cerdas untuk mahasiswa Indonesia. Jawab pertanyaan dengan bahasa yang ramah, jelas, dan mudah dipahami. Berikan contoh konkret jika membantu.';
+        }
+        if ($historyContext !== '') {
+            $system .= "\n\n" . $historyContext . "\nGunakan riwayat ini untuk memahami pertanyaan lanjutan, tetapi tetap prioritaskan materi/lampiran terbaru jika ada.";
         }
         $system .= "\n\nKonteks waktu: " . $currentDateContext . " Jika user bertanya tanggal, hari, atau waktu sekarang, gunakan konteks waktu ini dan jangan menebak.";
         $system .= "\n\nUntuk pertanyaan tentang data terbaru seperti jadwal rilis, berita, versi software, harga, atau event terkini, gunakan Google Search grounding yang tersedia.";

@@ -544,6 +544,7 @@
             <input type="text" class="qa-input" id="qaInput" placeholder="Tanya apa saja..." />
             <div class="qa-attachments">
                 <button class="btn-attach" id="btnQaAttach" type="button">&#128206; Lampirkan PDF/TXT/PPTX/Gambar</button>
+                <button class="btn-attach" id="btnNewChat" type="button">&#8635; Percakapan Baru</button>
                 <div class="qa-attachment-status" id="qaAttachmentStatus">
                     <span>&#9989;</span>
                     <span class="qa-attachment-name" id="qaAttachmentName"></span>
@@ -636,6 +637,7 @@
         var currentFile = null;
         var currentTool = 'ringkasan';
         var lastResult = '';
+        var qaHistory = [];
         var materialVisible = false;
         var textVisible = false;
         var hasMaterial = false;
@@ -643,6 +645,7 @@
         var qaInput = document.getElementById('qaInput');
         var btnAsk = document.getElementById('btnAsk');
         var btnQaAttach = document.getElementById('btnQaAttach');
+        var btnNewChat = document.getElementById('btnNewChat');
         var qaAttachmentStatus = document.getElementById('qaAttachmentStatus');
         var qaAttachmentName = document.getElementById('qaAttachmentName');
         var qaAttachmentRemove = document.getElementById('qaAttachmentRemove');
@@ -704,6 +707,15 @@
         });
 
         btnQaAttach.addEventListener('click', function() { fileInput.click(); });
+        btnNewChat.addEventListener('click', function() {
+            qaHistory = [];
+            qaInput.value = '';
+            result.classList.remove('show');
+            sourceList.classList.remove('show');
+            sourceList.innerHTML = '';
+            hideError();
+            hideWarning();
+        });
         qaAttachmentRemove.addEventListener('click', function() {
             currentFile = null;
             fileInput.value = '';
@@ -819,6 +831,9 @@
             }
             formData.append('mode', mode);
             if (question) formData.append('question', question);
+            if (mode === 'qa') {
+                formData.append('history', JSON.stringify(qaHistory.slice(-8)));
+            }
 
             fetch('api.php', {
                 method: 'POST',
@@ -832,6 +847,11 @@
                     lastResult = data.result;
                     renderResult(data.result, data.mode);
                     renderSources(data.sources || []);
+                    if (data.mode === 'qa') {
+                        qaHistory.push({ role: 'user', content: question });
+                        qaHistory.push({ role: 'assistant', content: data.result });
+                        qaHistory = qaHistory.slice(-10);
+                    }
                     if (data.warning) {
                         resultWarning.textContent = '\u26A0\uFE0F ' + data.warning;
                         resultWarning.classList.add('show');
