@@ -8,7 +8,7 @@ set PORT=8000
 set URL=http://%HOST%:%PORT%
 
 echo ========================================
-echo   AI Study Helper - Local PHP Server
+echo   AI Study Helper - Chat Mode
 echo ========================================
 echo.
 
@@ -40,7 +40,8 @@ if not exist "vendor\autoload.php" (
     )
 )
 
-echo Server berjalan di %URL%
+echo Server berjalan di %URL%/chat.html
+echo Mode: Chat & Conversation (dengan riwayat)
 echo Tekan Ctrl+C untuk menghentikan server.
 echo.
 

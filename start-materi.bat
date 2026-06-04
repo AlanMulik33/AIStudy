@@ -4,11 +4,11 @@ setlocal
 cd /d "%~dp0"
 
 set HOST=localhost
-set PORT=8000
+set PORT=8001
 set URL=http://%HOST%:%PORT%
 
 echo ========================================
-echo   AI Study Helper - Local PHP Server
+echo   AI Study Helper - Materi Mode
 echo ========================================
 echo.
 
@@ -41,10 +41,11 @@ if not exist "vendor\autoload.php" (
 )
 
 echo Server berjalan di %URL%
+echo Mode: Ringkasan, Soal Latihan, Flashcard (dari materi)
 echo Tekan Ctrl+C untuk menghentikan server.
 echo.
 
-start "" "%URL%/chat.html"
+start "" "%URL%"
 php -d upload_max_filesize=25M -d post_max_size=30M -d max_file_uploads=20 -S %HOST%:%PORT%
 
 endlocal
